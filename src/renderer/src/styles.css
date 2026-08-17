@@ -1,4 +1,5 @@
 :root {
+  /* 默认：黑色（深色） */
   --bg: #14161a;
   --panel: #1c1f26;
   --panel-2: #23262f;
@@ -10,6 +11,111 @@
   --red: #f87171;
   --amber: #fbbf24;
 }
+
+/* ---------- 主题色 ----------
+   每个主题定义完整色板。浅色主题底色为淡色，正文为深色，
+   --accent 用高饱和对比色做点缀（按钮、高亮、强调），形成对比层次。 */
+
+/* 黑色（默认，深色，蓝强调） */
+.theme-black {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --panel-2: #23262f;
+  --border: #2c303b;
+  --text: #e8eaf0;
+  --text-dim: #9aa1b0;
+  --accent: #4f8cff;
+}
+
+/* 白色（浅色，蓝强调） */
+.theme-white {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #eef0f4;
+  --border: #dfe2e8;
+  --text: #1c1e24;
+  --text-dim: #6b7280;
+  --accent: #2563eb;
+}
+
+/* 淡黄色（暖米色底，深棕字，橄榄绿对比点缀） */
+.theme-yellow {
+  --bg: #faf5e4;
+  --panel: #fffdf3;
+  --panel-2: #f5ecd1;
+  --border: #e3d5a9;
+  --text: #3d3316;
+  --text-dim: #8a7b52;
+  --accent: #7a7a1e;
+}
+
+/* 淡绿色（浅绿底，深绿字，翠绿对比点缀） */
+.theme-green {
+  --bg: #ecf5ef;
+  --panel: #fafdfb;
+  --panel-2: #e0efe6;
+  --border: #bfdbcc;
+  --text: #1c3b2c;
+  --text-dim: #5a7a6a;
+  --accent: #16a34a;
+}
+
+/* 淡紫色（浅紫底，深紫字，亮紫对比点缀） */
+.theme-purple {
+  --bg: #f3f0fa;
+  --panel: #fdfcff;
+  --panel-2: #e9e3f7;
+  --border: #d4c8ec;
+  --text: #2b2050;
+  --text-dim: #6d61a0;
+  --accent: #7c3aed;
+}
+
+/* 淡蓝色（浅蓝底，深蓝字，亮蓝对比点缀） */
+.theme-blue {
+  --bg: #edf3fb;
+  --panel: #fbfdff;
+  --panel-2: #e2ecf9;
+  --border: #c4d6ee;
+  --text: #1b2d47;
+  --text-dim: #5a7394;
+  --accent: #2563eb;
+}
+
+/* 主题切换圆点 */
+.theme-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.theme-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.theme-dot:hover {
+  transform: scale(1.2);
+}
+
+.theme-dot.selected {
+  border-color: var(--text);
+}
+
+.theme-dot.theme-black { background: #14161a; }
+.theme-dot.theme-white { background: #ffffff; border-color: #b9bdc7; }
+.theme-dot.theme-yellow { background: #f0e3b0; }
+.theme-dot.theme-green { background: #bfe6cd; }
+.theme-dot.theme-purple { background: #d6c9f0; }
+.theme-dot.theme-blue { background: #bfd7f5; }
 
 * {
   box-sizing: border-box;
@@ -208,6 +314,14 @@ body {
 .field input:disabled,
 .field select:disabled {
   opacity: 0.55;
+}
+
+.mode-hint {
+  align-self: flex-end;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-bottom: 9px;
+  line-height: 1.5;
 }
 
 .link-btn {

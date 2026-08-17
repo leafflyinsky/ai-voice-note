@@ -17,6 +17,18 @@ const PHASE_META: Record<SessionPhase, { label: string; cls: string }> = {
 
 type NoteState = 'idle' | 'generating' | 'preview' | 'saving'
 
+// 主题色方案（黑/白/淡黄/淡绿/淡紫/淡蓝）
+export type ThemeKey = 'black' | 'white' | 'yellow' | 'green' | 'purple' | 'blue'
+
+const THEMES: Array<{ key: ThemeKey; label: string }> = [
+  { key: 'black', label: '黑' },
+  { key: 'white', label: '白' },
+  { key: 'yellow', label: '淡黄' },
+  { key: 'green', label: '淡绿' },
+  { key: 'purple', label: '淡紫' },
+  { key: 'blue', label: '淡蓝' }
+]
+
 function defaultNoteName(): string {
   const d = new Date()
   const pad = (n: number): string => String(n).padStart(2, '0')
@@ -28,6 +40,19 @@ export default function App() {
   const [model, setModel] = useState(MODELS[0].value)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [urlOverride, setUrlOverride] = useState('')
+
+  // 模式：solo 单人 / meeting 会议
+  const [mode, setMode] = useState<'solo' | 'meeting'>(
+    () => (localStorage.getItem('ai_voice_note_mode') as 'solo' | 'meeting') || 'solo'
+  )
+  const [wakeWord, setWakeWord] = useState(
+    () => localStorage.getItem('ai_voice_note_wakeword') ?? 'AI'
+  )
+
+  // 主题色
+  const [theme, setTheme] = useState<ThemeKey>(
+    () => (localStorage.getItem('ai_voice_note_theme') as ThemeKey) || 'black'
+  )
 
   const [phase, setPhase] = useState<SessionPhase>('idle')
   const [phaseDetail, setPhaseDetail] = useState('')
@@ -77,11 +102,15 @@ export default function App() {
     localStorage.setItem('ai_voice_note_key', apiKey.trim())
     setLogs([])
     setNoteSavedPath('')
+    localStorage.setItem('ai_voice_note_mode', mode)
+    localStorage.setItem('ai_voice_note_wakeword', wakeWord.trim() || 'AI')
     const session = getSession()
     const res = await session.start({
       apiKey: apiKey.trim(),
       model,
-      url: urlOverride.trim() || undefined
+      url: urlOverride.trim() || undefined,
+      mode,
+      wakeWord: wakeWord.trim() || 'AI'
     })
     if (!res.ok) setPhaseDetail(res.error)
   }
@@ -156,19 +185,34 @@ export default function App() {
     setNoteMarkdown('')
   }
 
+  useEffect(() => {
+    localStorage.setItem('ai_voice_note_theme', theme)
+    // 主题类挂到 <html>（即 :root）上，让 body 等所有元素都能继承主题变量
+    document.documentElement.className = `theme-${theme}`
+  }, [theme])
+
   return (
     <div className="app">
       <header className="header">
         <div className="header-left">
           <span className="logo">🎙</span>
           <span className="title">AI 语音对话笔记</span>
-          <span className="badge">阶段0 demo</span>
         </div>
         <div className="header-right">
           <span className={`phase-pill ${meta.cls}`}>
             <span className="phase-dot" />
             {meta.label}
           </span>
+          <div className="theme-picker">
+            {THEMES.map((t) => (
+              <button
+                key={t.key}
+                className={`theme-dot theme-${t.key} ${theme === t.key ? 'selected' : ''}`}
+                title={t.label}
+                onClick={() => setTheme(t.key)}
+              />
+            ))}
+          </div>
           <button className="ghost-btn" onClick={() => setShowLog((v) => !v)}>
             {showLog ? '隐藏日志' : '连接日志'}
           </button>
@@ -200,6 +244,35 @@ export default function App() {
                 ))}
               </select>
             </label>
+          </div>
+          <div className="row">
+            <label className="field">
+              <span className="field-label">对话模式</span>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value as 'solo' | 'meeting')}
+                disabled={active}
+              >
+                <option value="solo">单人对话</option>
+                <option value="meeting">会议模式</option>
+              </select>
+            </label>
+            {mode === 'meeting' && (
+              <label className="field">
+                <span className="field-label">唤醒词（点名时喊它）</span>
+                <input
+                  type="text"
+                  value={wakeWord}
+                  onChange={(e) => setWakeWord(e.target.value)}
+                  placeholder="AI"
+                  spellCheck={false}
+                  disabled={active}
+                />
+              </label>
+            )}
+            {mode === 'meeting' && (
+              <span className="mode-hint">会议中安静倾听，被点名（说「{wakeWord || 'AI'}」+问题）才发言</span>
+            )}
           </div>
           <button className="link-btn" onClick={() => setShowAdvanced((v) => !v)}>
             {showAdvanced ? '收起' : '高级'}：WebSocket 地址

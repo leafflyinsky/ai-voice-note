@@ -31,6 +31,10 @@ export interface RealtimeOptions {
   apiKey: string
   model?: string
   url?: string
+  /** 对话模式：'solo' 单人对话（默认，server_vad）；'meeting' 会议模式（smart_turn + 唤醒词）。 */
+  mode?: 'solo' | 'meeting'
+  /** 会议模式下唤醒 AI 的称呼，默认 'AI'。 */
+  wakeWord?: string
 }
 
 let nextItemId = 0
@@ -103,26 +107,12 @@ export class RealtimeSession {
       window.api.onError((e) => this.log(`[错误] ${e.message}`))
     )
 
-    // 发送会话配置：server_vad 轮次检测，PCM 16k 进 / 24k 出
-    this.send({
-      type: 'session.update',
-      session: {
-        input_audio_format: 'pcm',
-        output_audio_format: 'pcm',
-        input_audio_sample_rate: 16000,
-        output_audio_sample_rate: 24000,
-        modalities: ['audio', 'text'],
-        instructions:
-          '你是一个语音对话笔记助手，用简洁自然的语言与用户讨论想法、梳理思路。回复保持口语化，适合语音收听。',
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          silence_duration_ms: 800,
-          create_response: true
-        }
-      }
-    })
-    this.log('已发送 session.update（server_vad / 静音 800ms / PCM 16k→24k）')
+    // 发送会话配置：按模式生成（solo=server_vad / meeting=smart_turn + 唤醒词）
+    const sessionConfig = this.buildSessionConfig(opts)
+    this.send({ type: 'session.update', session: sessionConfig })
+    this.log(
+      `已发送 session.update（${opts.mode === 'meeting' ? '会议模式 smart_turn' : '单人模式 server_vad'}）`
+    )
 
     // 初始化播放器
     try {
@@ -245,6 +235,51 @@ export class RealtimeSession {
     this.userItemIndex = null
     this.responseActive = false
     this.aiItemIndex = null
+  }
+
+  /** 按模式生成 session.update 配置。 */
+  private buildSessionConfig(opts: RealtimeOptions): Record<string, unknown> {
+    const isMeeting = opts.mode === 'meeting'
+    const wake = (opts.wakeWord || 'AI').trim()
+
+    const base: Record<string, unknown> = {
+      input_audio_format: 'pcm',
+      output_audio_format: 'pcm',
+      input_audio_sample_rate: 16000,
+      output_audio_sample_rate: 24000,
+      modalities: ['audio', 'text']
+    }
+
+    if (isMeeting) {
+      return {
+        ...base,
+        instructions:
+          `你是这场会议的参与者和顾问，角色名是「${wake}」。你必须遵守以下规则：` +
+          `1) 保持安静，认真倾听会议中其他人说话，不要主动发言、不要插话。` +
+          `2) 只有当你被明确点名或直接提问时（例如「${wake}，你觉得呢」「${wake}，你怎么看」` +
+          `「请${wake}说说」「${wake}有补充吗」），你才发言。` +
+          `3) 发言要简洁、口语化，直接给观点或建议，适合语音收听，不要客套。` +
+          `4) 未被点名时，即便听到问题也不要回答，保持沉默。`,
+        turn_detection: {
+          type: 'smart_turn',
+          threshold: 0.5,
+          silence_duration_ms: 800,
+          create_response: true
+        }
+      }
+    }
+
+    return {
+      ...base,
+      instructions:
+        '你是一个语音对话笔记助手，用简洁自然的语言与用户讨论想法、梳理思路。回复保持口语化，适合语音收听。',
+      turn_detection: {
+        type: 'server_vad',
+        threshold: 0.5,
+        silence_duration_ms: 800,
+        create_response: true
+      }
+    }
   }
 
   // ---------- 消息插入（核心顺序保证） ----------

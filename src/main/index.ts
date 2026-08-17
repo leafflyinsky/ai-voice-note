@@ -215,7 +215,7 @@ function createWindow(): void {
     height: 720,
     minWidth: 760,
     minHeight: 560,
-    title: 'AI 语音对话笔记（阶段0 demo）',
+    title: 'AI 语音对话笔记',
     autoHideMenuBar: true,
     backgroundColor: '#14161a',
     webPreferences: {

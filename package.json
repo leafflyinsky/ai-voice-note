@@ -1,6 +1,6 @@
 {
   "name": "ai-voice-note",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "AI 语音对话笔记工具 —— 阶段0：实时语音链路连通性 demo",
   "main": "./out/main/index.js",
   "author": "lhd",
