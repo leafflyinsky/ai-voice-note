@@ -16,6 +16,7 @@ declare global {
       generateNotes: (opts: {
         apiKey: string
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+        documents?: Array<{ name: string; content: string }>
       }) => Promise<{ ok: true; content: string } | { ok: false; error: string }>
       saveNote: (opts: {
         content: string

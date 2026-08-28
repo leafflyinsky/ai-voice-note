@@ -44,10 +44,12 @@ const api = {
     return () => ipcRenderer.removeListener('realtime:error', listener)
   },
 
-  /** 用 qwen-max 把对话整理成 Markdown 笔记。 */
+  /** 用 qwen3.7-max 把对话（+可选参考文档）整理成 Markdown 笔记。 */
   generateNotes: (opts: {
     apiKey: string
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+    /** 上传的参考文档，整理笔记时一起提供给模型。 */
+    documents?: Array<{ name: string; content: string }>
   }): Promise<{ ok: true; content: string } | { ok: false; error: string }> =>
     ipcRenderer.invoke('notes:generate', opts),
 

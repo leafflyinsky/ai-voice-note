@@ -16,6 +16,8 @@ export interface TranscriptItem {
   text: string
   /** false = 仍在转写中/回复中，UI 显示闪烁光标。 */
   final: boolean
+  /** 若为文档上传消息，附带文件名（UI 显示 📎 标记，不展示正文）。 */
+  doc?: { name: string }
 }
 
 export interface RealtimeCallbacks {
@@ -39,8 +41,16 @@ export interface RealtimeOptions {
 
 let nextItemId = 0
 
-function makeItem(role: 'user' | 'assistant', text: string, final: boolean): TranscriptItem {
-  return { id: nextItemId++, role, text, final }
+/** 实时注入单份文档内容的字符上限（过长截断，避免撑爆实时模型上下文；完整内容仍会进笔记）。 */
+const MAX_REALTIME_DOC_CHARS = 30000
+
+function makeItem(
+  role: 'user' | 'assistant',
+  text: string,
+  final: boolean,
+  doc?: { name: string }
+): TranscriptItem {
+  return { id: nextItemId++, role, text, final, ...(doc ? { doc } : {}) }
 }
 
 /**
@@ -185,6 +195,73 @@ export class RealtimeSession {
     this.send(itemEvent)
     this.send(createEvent)
     this.setPhase('speaking', 'AI 正在回复')
+  }
+
+  /**
+   * 上传一份文档（纯文本内容）到会话上下文。
+   * 文档作为 user 消息注入（带「已上传的文档资料」标记），并触发一次简短语音确认——
+   * 提示 AI 只确认收到、不展开总结，等用户就文档提问再回答。
+   * UI 上会多一条「📎 已上传：文件名」的用户消息。
+   */
+  sendDocument(name: string, content: string): void {
+    if (!name || !this.isActive) return
+
+    // 若 AI 正在回复，先打断
+    if (this.responseActive) {
+      this.send({ type: 'response.cancel' })
+      this.player?.clear()
+      this.finalizeAssistant()
+    }
+    this.commitPendingUser()
+
+    // 本地插入文档消息（仅显示文件名，正文不进 UI）
+    this.items = [...this.items, makeItem('user', '', true, { name })]
+    this.emitTranscript()
+
+    // 注入文档内容并触发简短确认
+    this.send({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: this.buildDocumentPrompt(name, content) }]
+      }
+    })
+    const createEvent = { type: 'response.create', response: { modalities: ['text', 'audio'] } }
+    this.send(createEvent)
+    this.setPhase('speaking', 'AI 正在回复')
+  }
+
+  /**
+   * 会话建立后静默注入已上传的文档（不打断、不触发确认）。
+   * 用于「重新开始对话」后保留文档上下文，AI 不因此发言，等用户提问。
+   */
+  injectDocuments(docs: Array<{ name: string; content: string }>): void {
+    if (!this.isActive || docs.length === 0) return
+    for (const d of docs) {
+      this.send({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: this.buildDocumentPrompt(d.name, d.content) }]
+        }
+      })
+    }
+    this.log(`已注入 ${docs.length} 份文档到会话上下文`)
+  }
+
+  /** 生成注入上下文的文档文本：文件名 + 内容（过长截断）+ 对 AI 的指示。 */
+  private buildDocumentPrompt(name: string, content: string): string {
+    const truncated = content.length > MAX_REALTIME_DOC_CHARS
+    const body = truncated ? content.slice(0, MAX_REALTIME_DOC_CHARS) : content
+    return (
+      `[上传的文档资料] 文件名: ${name}\n` +
+      (truncated ? `（内容较长，仅注入前 ${MAX_REALTIME_DOC_CHARS} 字符）\n` : '') +
+      `---\n${body}\n---\n` +
+      '以上是用户上传的文档内容，作为后续讨论的参考资料。' +
+      '若用户刚上传，只简单确认收到即可，不要展开总结；等用户就文档提问再回答。'
+    )
   }
 
   async stop(): Promise<void> {

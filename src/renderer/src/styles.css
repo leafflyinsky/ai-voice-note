@@ -511,6 +511,94 @@ body {
   padding-top: 12px;
 }
 
+/* 文档上传 */
+.hidden-file-input {
+  display: none;
+}
+
+.upload-btn {
+  border-radius: 8px;
+  width: 38px;
+  flex-shrink: 0;
+  font-size: 15px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.upload-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 已上传文档列表（输入栏上方） */
+.doc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+
+.doc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px 3px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.doc-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.doc-chip-remove {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.doc-chip-remove:hover {
+  color: var(--red);
+}
+
+.doc-error {
+  margin: 0 16px 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+  color: var(--amber);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* 对话区里的「📎 已上传」消息 */
+.doc-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
 .text-input {
   flex: 1;
   background: var(--panel-2);

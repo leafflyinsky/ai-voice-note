@@ -7,6 +7,36 @@ const MODELS = [
   { value: 'qwen-audio-3.0-realtime-flash', label: 'qwen-audio-3.0-realtime-flash' }
 ]
 
+// ---------- 文档上传 ----------
+
+interface DocItem {
+  name: string
+  content: string
+}
+
+/** 首版支持的纯文本扩展名白名单（二进制格式 PDF/docx/xlsx 留待后续版本）。 */
+const TEXT_EXTS = new Set([
+  'txt', 'md', 'markdown', 'json', 'csv', 'log', 'ini', 'toml', 'yaml', 'yml',
+  'js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs',
+  'html', 'css', 'xml', 'sh', 'bat', 'ps1'
+])
+
+/** 单文件大小上限（2MB），超出提示。 */
+const MAX_DOC_SIZE = 2 * 1024 * 1024
+
+/**
+ * 读取纯文本文件：先严格按 UTF-8 解码，失败则按 GBK（Windows 常见中文编码）重解。
+ * 浏览器 TextDecoder 支持 gb18030（覆盖全部 GBK 字符）。
+ */
+async function readTextFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    return new TextDecoder('gb18030').decode(buf)
+  }
+}
+
 const PHASE_META: Record<SessionPhase, { label: string; cls: string }> = {
   idle: { label: '未连接', cls: 'phase-idle' },
   connecting: { label: '连接中…', cls: 'phase-connecting' },
@@ -63,6 +93,10 @@ export default function App() {
   // 文字输入
   const [textInput, setTextInput] = useState('')
 
+  // 文档上传（跨会话保留，重新开始对话时静默重注入）
+  const [documents, setDocuments] = useState<DocItem[]>([])
+  const [docError, setDocError] = useState('')
+
   // 笔记整理
   const [noteState, setNoteState] = useState<NoteState>('idle')
   const [noteMarkdown, setNoteMarkdown] = useState('')
@@ -71,6 +105,7 @@ export default function App() {
 
   const sessionRef = useRef<RealtimeSession | null>(null)
   const logRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const getSession = useCallback((): RealtimeSession => {
     if (!sessionRef.current) {
@@ -112,7 +147,14 @@ export default function App() {
       mode,
       wakeWord: wakeWord.trim() || 'AI'
     })
-    if (!res.ok) setPhaseDetail(res.error)
+    if (!res.ok) {
+      setPhaseDetail(res.error)
+      return
+    }
+    // 已上传的文档静默注入上下文（不打断、不触发 AI 发言）
+    if (documents.length > 0) {
+      session.injectDocuments(documents)
+    }
   }
 
   const stop = async (): Promise<void> => {
@@ -140,6 +182,47 @@ export default function App() {
     if (e.key === 'Enter') sendText()
   }
 
+  // ---------- 文档上传 ----------
+
+  const pickDocument = (): void => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFiles = (files: FileList | null): void => {
+    const file = files?.[0]
+    // 清空 input 值，确保下次选择同一文件也会触发 change
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file) return
+
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase()
+    if (!TEXT_EXTS.has(ext)) {
+      setDocError(`暂不支持 .${ext || '?'} 格式（首版支持纯文本：txt / md / json / csv / 代码等）`)
+      return
+    }
+    if (file.size > MAX_DOC_SIZE) {
+      setDocError(`文件超过 ${MAX_DOC_SIZE / 1024 / 1024}MB，请换小一点的文件`)
+      return
+    }
+
+    void (async () => {
+      const text = await readTextFile(file)
+      // 重复上传同名文件直接替换，避免同一文档塞两次
+      setDocuments((prev) => {
+        const rest = prev.filter((d) => d.name !== file.name)
+        return [...rest, { name: file.name, content: text }]
+      })
+      setDocError('')
+      // 若正在对话，立即注入并让 AI 简短确认；否则等「开始对话」时统一静默注入
+      if (sessionRef.current?.isActive) {
+        sessionRef.current.sendDocument(file.name, text)
+      }
+    })()
+  }
+
+  const removeDocument = (idx: number): void => {
+    setDocuments((prev) => prev.filter((_, i) => i !== idx))
+  }
+
   const generateNote = async (): Promise<void> => {
     if (!apiKey.trim()) {
       setNoteError('请先填写 API Key')
@@ -155,7 +238,11 @@ export default function App() {
     setNoteState('generating')
     setNoteError('')
     setNoteSavedPath('')
-    const res = await window.api.generateNotes({ apiKey: apiKey.trim(), messages })
+    const res = await window.api.generateNotes({
+      apiKey: apiKey.trim(),
+      messages,
+      documents: documents.length > 0 ? documents : undefined
+    })
     if (res.ok) {
       setNoteMarkdown(res.content)
       setNoteState('preview')
@@ -304,7 +391,11 @@ export default function App() {
               <div key={item.id} className={`msg ${item.role}`}>
                 <div className="msg-label">{item.role === 'user' ? '我' : 'AI'}</div>
                 <div className={`msg-bubble ${item.final ? '' : 'streaming'}`}>
-                  {item.text || (item.role === 'user' ? '…' : '')}
+                  {item.doc ? (
+                    <span className="doc-msg">📎 已上传：{item.doc.name}</span>
+                  ) : (
+                    item.text || (item.role === 'user' ? '…' : '')
+                  )}
                 </div>
               </div>
             ))}
@@ -312,8 +403,37 @@ export default function App() {
 
           {phaseDetail && <div className="phase-detail">{phaseDetail}</div>}
 
+          {/* 已上传文档列表 */}
+          {documents.length > 0 && (
+            <div className="doc-list">
+              {documents.map((d, i) => (
+                <span key={i} className="doc-chip" title={d.name}>
+                  📎 {d.name}
+                  <button
+                    className="doc-chip-remove"
+                    onClick={() => removeDocument(i)}
+                    title="移除文档（已注入会话的无法撤回）"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {docError && <div className="doc-error">{docError}</div>}
+
           {/* 文字输入 + 整理笔记 */}
           <div className="input-bar">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden-file-input"
+              onChange={(e) => handleFiles(e.target.files)}
+              accept=".txt,.md,.markdown,.json,.csv,.log,.ini,.toml,.yaml,.yml,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.html,.css,.xml,.sh,.bat,.ps1"
+            />
+            <button className="upload-btn" onClick={pickDocument} title="上传文档（txt/md/json/csv/代码等）">
+              📎
+            </button>
             <input
               className="text-input"
               type="text"

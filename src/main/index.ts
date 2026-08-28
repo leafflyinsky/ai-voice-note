@@ -118,12 +118,27 @@ function setupIpc(): void {
 
   ipcMain.handle(
     'notes:generate',
-    async (_e, opts: { apiKey?: string; messages?: unknown }) => {
+    async (_e, opts: { apiKey?: string; messages?: unknown; documents?: unknown }) => {
       const apiKey = opts?.apiKey
       const messages = opts?.messages
       if (!apiKey || !Array.isArray(messages) || messages.length === 0) {
         return { ok: false as const, error: '缺少 API Key 或对话内容' }
       }
+      const documents = opts?.documents
+      const docMessages = Array.isArray(documents)
+        ? documents
+            .filter(
+              (d): d is { name?: unknown; content?: unknown } =>
+                !!d && typeof d === 'object' && typeof (d as { content?: unknown }).content === 'string'
+            )
+            .map((d) => ({
+              role: 'user' as const,
+              content:
+                `[上传的文档资料] 文件名: ${typeof d.name === 'string' && d.name ? d.name : '未命名'}\n` +
+                `---\n${(d as { content: string }).content}\n---\n` +
+                '以上是用户讨论时上传的参考文档。整理笔记时可引用其中的要点，但不要把它当成对话内容。'
+            }))
+        : []
       const url =
         'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
       try {
@@ -134,9 +149,10 @@ function setupIpc(): void {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'qwen-max',
-            input: { messages: [NOTE_SYSTEM_PROMPT, ...messages] },
-            parameters: { result_format: 'message' }
+            // qwen3.7-max：100 万上下文，长对话+参考文档一次放得下，不会把开头的系统提示词和早期对话裁掉
+            model: 'qwen3.7-max',
+            input: { messages: [NOTE_SYSTEM_PROMPT, ...docMessages, ...messages] },
+            parameters: { result_format: 'message', max_tokens: 8192 }
           })
         })
         const data = await res.json().catch(() => null)

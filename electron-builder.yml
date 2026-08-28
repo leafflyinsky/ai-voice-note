@@ -7,6 +7,8 @@ files:
   - out/**
   - package.json
 asar: true
+# 使用本地已安装的 Electron 二进制，避免 electron-builder 联网下载 GitHub 资源超时
+electronDist: node_modules/electron/dist
 win:
   target:
     - target: zip
